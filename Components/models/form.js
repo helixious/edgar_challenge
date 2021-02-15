@@ -28,7 +28,8 @@ export default (sequelize, DataTypes) => {
         },
         fileName: {
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: false,
+            // unique: true
         }
     });
 }
