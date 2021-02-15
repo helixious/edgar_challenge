@@ -18,9 +18,12 @@
   },
   "homepage": "https://github.com/helixious/edgar_challenge#readme",
   "dependencies": {
+    "buffer-crc32": "^0.2.13",
     "dotenv": "^8.2.0",
     "ejs": "^3.1.6",
     "esm": "^3.2.25",
-    "jsdom": "^16.4.0"
+    "jsdom": "^16.4.0",
+    "pg": "^8.5.1",
+    "sequelize": "^6.5.0"
   }
 }
