@@ -3,21 +3,25 @@ import EventEmitter from 'events';
 // Here we setup the user and company object relational maps
 import User from './models/user';
 import Form from './models/form';
+import FormShard from './models/form_shard';
 import Company from './models/company';
 
 export default class Orm extends EventEmitter{
     constructor () {
         super();
+        this.shards = {};
         return new Promise((resolve) => {
             Db().then((db) => {
                 this._db = db;
                 this._user = User(this._db, DataTypes);
                 this._company = Company(this._db, DataTypes);
                 this._form = Form(this._db, DataTypes);
+                // this.shards['1933'] = FormShard(this._db, DataTypes, '1993');
+                this.createShardTables(1993, 2021);
             }).finally(() => {
                 this._db.authenticate().then(async() => {
-                    await this._db.sync({force: true});
-                    // await this._db.sync();
+                    // await this._db.sync({force: true});
+                    await this._db.sync();
                     console.log('Database connected...')
                     this.emit('ready')
                     resolve(this);
@@ -33,9 +37,56 @@ export default class Orm extends EventEmitter{
                 Mutation: this.mutation()
             }
         });
-        
+    }
 
-        
+    createShardTables(startIndex, endIndex) {
+        for(let i = startIndex; i < endIndex+1; i++) {
+            let shardKey = i.toString();
+            let shard = FormShard(this._db, DataTypes, shardKey);
+            this.shards[shardKey] = shard;
+        }        
+    }
+
+    async createNewTable(tableName) {
+        try {
+            await this._db.define(tableName,
+                {
+                    id: {
+                        primaryKey: true,
+                        type: DataTypes.INTEGER,
+                        allowNull: false,
+                        unique: true,
+                        autoIncrement: true,
+                        field: 'form_id'
+                    },
+                    cik: {
+                        primaryKey: false,
+                        type: DataTypes.INTEGER,
+                        references: {
+                            model: 'company',
+                            key: 'cik',
+                        }
+                    },
+                    formType: {
+                        type: DataTypes.STRING,
+                        unique: false,
+                        allowNull: false
+                    },
+                    dateFiled: {
+                        type: DataTypes.STRING,
+                        allowNull: false,
+                        unique: false
+                    },
+                    fileName: {
+                        type: DataTypes.STRING,
+                        allowNull: false,
+                        // unique: true
+                    }
+                });
+        } catch (e) {
+            console.log(e);
+        }
+
     }
 
     addCompanyForms(companyData) {
