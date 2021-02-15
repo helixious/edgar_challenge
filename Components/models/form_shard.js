@@ -1,5 +1,5 @@
-export default (sequelize, DataTypes) => {
-    return sequelize.define('form', {
+export default (sequelize, DataTypes, shardName) => {
+    return sequelize.define(shardName, {
         id: {
             primaryKey: true,
             type: DataTypes.INTEGER,
@@ -31,5 +31,8 @@ export default (sequelize, DataTypes) => {
             allowNull: false,
             // unique: true
         }
+    },
+    {
+        freezeTableName: true
     });
 }
