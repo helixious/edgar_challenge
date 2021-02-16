@@ -9,19 +9,17 @@ import Company from './models/company';
 export default class Orm extends EventEmitter{
     constructor () {
         super();
-        this.shards = {};
         return new Promise((resolve) => {
             Db().then((db) => {
                 this._db = db;
                 this._user = User(this._db, DataTypes);
                 this._company = Company(this._db, DataTypes);
-                this._form = Form(this._db, DataTypes);
-                // this.shards['1933'] = FormShard(this._db, DataTypes, '1993');
-                this.createShardTables(1993, 2021);
+                // this._form = Form(this._db, DataTypes);
+                this._shards = this.createShardTables(1993, 2021);
             }).finally(() => {
                 this._db.authenticate().then(async() => {
-                    // await this._db.sync({force: true});
-                    await this._db.sync();
+                    await this._db.sync({force: true});
+                    // await this._db.sync();
                     console.log('Database connected...')
                     this.emit('ready')
                     resolve(this);
@@ -40,11 +38,14 @@ export default class Orm extends EventEmitter{
     }
 
     createShardTables(startIndex, endIndex) {
+        const shardDictionary = [];
         for(let i = startIndex; i < endIndex+1; i++) {
             let shardKey = i.toString();
             let shard = FormShard(this._db, DataTypes, shardKey);
-            this.shards[shardKey] = shard;
-        }        
+            shardDictionary[shardKey] = shard;
+        }
+        
+        return shardDictionary;
     }
 
     async createNewTable(tableName) {
@@ -86,42 +87,36 @@ export default class Orm extends EventEmitter{
         } catch (e) {
             console.log(e);
         }
-
     }
 
-    addCompanyForms(companyData) {
+    bulkInsertIntoShard(data, shardKey) {
         return new Promise((resolve, reject) => {
             try {
-                let {cik, companyName, forms} = companyData;
-                this._db.transaction((t) => {
-                    return this._company.findOrCreate({
-                        where: {
-                            id: cik,
-                            name: companyName
-                        },
+                const transaction = this._db.transaction((t) => {
+                    return this._shards[shardKey].bulkCreate(data,{
                         returning: false,
                         ignoreDuplicates: true,
                         transaction: t
-                    })
-                }).then(() => {
-                    
-                }).catch((e) => {
-                    // console.log(e);
-                }).finally(() => {
-                    this._form.bulkCreate(forms, {
-                        // fields: ["fileName"],
-                        // updateOnDuplicate:["fileName"]
-                        // returning: true,
-                        returning: false,
-                        ignoreDuplicates: true
-                    }).then(() => resolve())
-                    .catch((e) => reject(e));
-                })
+                    });
+                });
+                resolve(transaction);
             } catch(e) {
                 reject(e);
             }
-        })
-        
+        });
+    }
+    bulkInsertCompany(companyData) {
+        return new Promise ((resolve, reject) => {
+            const transaction = this._db.transaction((t) => {
+                return this._company.bulkCreate(companyData, {
+                    returning: false,
+                    // individualHooks: true,
+                    ignoreDuplicates: true,
+                    transaction: t
+                })
+            })
+            resolve(transaction);
+        });
     }
 
     createUser(userData) {

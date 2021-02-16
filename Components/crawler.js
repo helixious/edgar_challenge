@@ -7,13 +7,19 @@ export default class Crawler extends EventEmitter{
     //DDOS flag prevention: Implemented concurrency limit of a default of 5 concurrent requests limit.
     constructor(maxConnectionCount = 8) {
         super();
+        this._tickers = {};
         this._indexUrls = [];
+        this._formCount = 0;
         this._maxConnectionCount = maxConnectionCount;
         this._connectionCount = 0;
 
-        this.spawnDBInstances().then((clients) => {
+        this.spawnDBInstances().then( async (clients) => {
             this._db = clients;
-
+            const tickers = await this.fetchPage('https://www.sec.gov/files/company_tickers.json');
+            Object.keys(tickers).forEach(index => {
+                let {cik_str, ticker} = tickers[index];
+                this._tickers[cik_str]= ticker;
+            })
 
             this.fetchIndexLinks();
         })
@@ -24,8 +30,8 @@ export default class Crawler extends EventEmitter{
         let instances = []
         for (let i = 0; i < this._maxConnectionCount; i++) {
             // let client = await new Promise((resolve) => resolve(new Orm()));
-            let client = await new Orm();
-            instances.push({client, isIdle: true});
+            let orm = await new Orm();
+            instances.push({orm, isIdle: true});
         }
         return instances;
     }
@@ -38,16 +44,22 @@ export default class Crawler extends EventEmitter{
                 if(this._indexUrls.length > 0 && this._connectionCount < this._maxConnectionCount) {
 
 
-                    console.log(`active connections: ${this._connectionCount}, indexes queued: ${this._indexUrls.length}`);
                     let url = this._indexUrls.shift();
                     this._connectionCount++;
+                    console.log(`active connections: ${this._connectionCount}, indexes queued: ${this._indexUrls.length}`);
                     this.fetchPage(url).then((data) => {
-                        this.extractEdgarIndex(data).then( async(indexData) => {
-                            for(const companyData of indexData) {
+                        this.extractEdgarIndex(data).then( async({shardData, companyData}) => {
+                            let shardKeys = Object.keys(shardData);
+                            for(const shardKey of shardKeys) {
                                 for(let i = 0; i < this._db.length; i++) {
+                                    // this prevents race condition
+                                    let shard = shardData[shardKey];
                                     if(this._db[i].isIdle) {
                                         this._db[i].isIdle = false;
-                                        await this._db[i].client.addCompanyForms(companyData);
+
+                                        // storing form data into different table shards
+                                        await this._db[i].orm.bulkInsertCompany(companyData);
+                                        await this._db[i].orm.bulkInsertIntoShard(shard, shardKey);
                                         this._db[i].isIdle = true;
                                     }
                                 }
@@ -72,8 +84,9 @@ export default class Crawler extends EventEmitter{
 
         return new Promise((resolve, reject) => {
             try {
-                let cikDictionary = {};
-                let result = [];
+                let shardDictionary = {};
+                let companyDictionary = {};
+                let companyData = [];
                 let rows = data.split('\n');
                 let cursor = null;
                 let formCount = 0;
@@ -88,25 +101,28 @@ export default class Crawler extends EventEmitter{
                         let formType = columns[2];
                         let dateFiled = columns[3];
                         let fileName = columns[4];
+                        let ticker = this._tickers[cik];
+
+                        
 
                         if(formType && dateFiled && fileName) {
-                            if(!cikDictionary[cik]) {
-                                cikDictionary[cik] = {
-                                    cik, companyName, forms:[]
-                                }
+                            if(!companyDictionary[cik]) {
+                                companyDictionary[cik] = true;
+                                companyData.push({id:cik, name:companyName, ticker})
                             }
-                            cikDictionary[cik].forms.push({cik, formType, dateFiled, fileName});
+                            let shardKey = dateFiled.split('-').shift();
+                            if(!shardDictionary[shardKey]) shardDictionary[shardKey] = [];
+                            shardDictionary[shardKey].push({cik, formType, dateFiled, fileName});
                         }
                         
                     }
                 }
-                for(let cik of Object.keys(cikDictionary)) {
-
-                    formCount += cikDictionary[cik].forms.length;
-                    result.push(cikDictionary[cik]);
+                for(let shardKey of Object.keys(shardDictionary)) {
+                    formCount += shardDictionary[shardKey].length;
+                    this._formCount += shardDictionary[shardKey].length;
                 }
-                console.log('form count:',formCount);
-                resolve(result);
+                console.log(`company count: ${companyData.length} form count: ${formCount}, total form count: ${this._formCount}`);
+                resolve({companyData, shardData: shardDictionary});
             } catch(e) {
                 reject(e);
             }
