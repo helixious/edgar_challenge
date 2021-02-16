@@ -7,21 +7,20 @@ import FormShard from './models/form_shard';
 import Company from './models/company';
 
 export default class Orm extends EventEmitter{
-    constructor () {
+    constructor ({purge = false}) {
+
         super();
         return new Promise((resolve) => {
-            Db().then((db) => {
+            Db().then((db) => { // after setting up db config define the table schemas (user, company and shards)
                 this._db = db;
+
                 this._user = User(this._db, DataTypes);
                 this._company = Company(this._db, DataTypes);
-                // this._form = Form(this._db, DataTypes);
                 this._shards = this.createShardTables(1993, 2021);
             }).finally(() => {
                 this._db.authenticate().then(async() => {
-                    await this._db.sync({force: true});
-                    // await this._db.sync();
+                    await this._db.sync({force: purge}); // npm start import will set purge param to true, forcing DB to recreate all tables 
                     console.log('Database connected...')
-                    this.emit('ready')
                     resolve(this);
                 }).catch(err => {
                     console.log('Error: ' + err);
@@ -37,56 +36,17 @@ export default class Orm extends EventEmitter{
         });
     }
 
+
+    // shardKeys are created using the date range of 1993, 2021
     createShardTables(startIndex, endIndex) {
         const shardDictionary = [];
         for(let i = startIndex; i < endIndex+1; i++) {
             let shardKey = i.toString();
-            let shard = FormShard(this._db, DataTypes, shardKey);
+            let shard = FormShard(this._db, DataTypes, shardKey); // this object defines new shardTable and is used to query the table
             shardDictionary[shardKey] = shard;
         }
         
         return shardDictionary;
-    }
-
-    async createNewTable(tableName) {
-        try {
-            await this._db.define(tableName,
-                {
-                    id: {
-                        primaryKey: true,
-                        type: DataTypes.INTEGER,
-                        allowNull: false,
-                        unique: true,
-                        autoIncrement: true,
-                        field: 'form_id'
-                    },
-                    cik: {
-                        primaryKey: false,
-                        type: DataTypes.INTEGER,
-                        references: {
-                            model: 'company',
-                            key: 'cik',
-                        }
-                    },
-                    formType: {
-                        type: DataTypes.STRING,
-                        unique: false,
-                        allowNull: false
-                    },
-                    dateFiled: {
-                        type: DataTypes.STRING,
-                        allowNull: false,
-                        unique: false
-                    },
-                    fileName: {
-                        type: DataTypes.STRING,
-                        allowNull: false,
-                        // unique: true
-                    }
-                });
-        } catch (e) {
-            console.log(e);
-        }
     }
 
     bulkInsertIntoShard(data, shardKey) {
