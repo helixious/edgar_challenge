@@ -1,18 +1,23 @@
 export default `
-    input UserInput {
-        name: String!,
-        email: String!,
-        vendor: String!
+
+    type Company {
+        id: Int
+        name: String
     }
 
-    input CompanyInput {
-        id: Int!,
-        formType: String!,
-        name: String!
+    type Filling {
+        cik: Int
+        formType: String
+        dateFiled: String
+        fileName: String
     }
 
-    input CompanyFormInput {
-        cik: Int!
-        form_id: Int!
+    type Query {
+        getCompanyByTicker(ticker: String): Company
+        getListingByCik(cik: Int!): [Filling]
     }
-`;
+
+    schema {
+        query: Query
+    }
+`

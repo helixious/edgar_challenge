@@ -11,10 +11,10 @@ export default (sequelize, DataTypes, shardName) => {
         cik: {
             primaryKey: false,
             type: DataTypes.INTEGER,
-            // references: {
-            //     model: 'company',
-            //     key: 'cik',
-            // }
+            references: {
+                model: 'company',
+                key: 'cik',
+            }
         },
         formType: {
             type: DataTypes.STRING,

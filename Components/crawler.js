@@ -13,26 +13,19 @@ export default class Crawler extends EventEmitter{
         this._maxConnectionCount = maxConnectionCount;
         this._connectionCount = 0;
 
-        this.spawnDBInstances().then( async (clients) => {
-            this._db = clients;
-            const tickers = await this.fetchPage('https://www.sec.gov/files/company_tickers.json');
-            Object.keys(tickers).forEach(index => {
-                let {cik_str, ticker} = tickers[index];
-                this._tickers[cik_str]= ticker;
-            })
-
-            this.fetchIndexLinks();
-        })
+        this.init();
         
     }
 
-    async spawnDBInstances() {
-        let instances = []
-        for (let i = 0; i < this._maxConnectionCount; i++) {
-            let orm = await new Orm({purge:i == 0}); // first connection is responsible for purging and recreating tables
-            instances.push({orm, isIdle: true}); // isIdle param is toggled to set place a lock on the ORM object while it comits new data to database
-        }
-        return instances;
+    async init() {
+        this.orm = new Orm(true);
+        const tickers = await this.fetchPage('https://www.sec.gov/files/company_tickers.json');
+        Object.keys(tickers).forEach(index => {
+            let { cik_str, ticker } = tickers[index];
+            this._tickers[cik_str] = ticker;
+        })
+
+        this.fetchIndexLinks();
     }
 
     fetchIndexData() {
@@ -48,14 +41,8 @@ export default class Crawler extends EventEmitter{
 
                         // the extracted data gets splitted into two data objects that are independently commited 
                         this.extractEdgarIndex(data).then( async({shardKey, shardData, companyData}) => {
-                            for(let i = 0; i < this._db.length; i++) {
-                                if(this._db[i].isIdle) { // this prevents race condition
-                                    this._db[i].isIdle = false;
-                                    await this._db[i].orm.bulkInsertCompany(companyData);
-                                    await this._db[i].orm.bulkInsertIntoShard(shardData, shardKey); // storing form data into different table shards
-                                    this._db[i].isIdle = true;
-                                }
-                            }
+                            await this.orm.bulkInsertCompany(companyData);
+                            await this.orm.bulkInsertIntoShard(shardData, shardKey); // storing form data into different table shards
                             this._connectionCount--;
                             this.fetchIndexData();
                         }).catch((e) => {
@@ -101,20 +88,19 @@ export default class Crawler extends EventEmitter{
                         let ticker = this._tickers[cik];
 
                         if(formType && dateFiled && fileName) {
-                            if(!shardKey) {
-                                let dateComponents = dateFiled.split('-');
-                                shardKey = dateComponents.shift();
-                                let month = Number(dateComponents.shift());
-                                if(month < 4) {
-                                    quarter = 'Q1'
-                                } else if(month >= 4 && month < 7) {
-                                    quarter = 'Q2'
-                                } else if(month >= 7 && month < 10) {
-                                    quarter = 'Q3'
-                                } else {
-                                    quarter = 'Q4'
-                                }
-                            } 
+                            let dateComponents = dateFiled.split('-');
+                            shardKey = dateComponents.shift();
+                            fileName = fileName.replace('.txt', '-index.html');
+                            let month = Number(dateComponents.shift());
+                            if (month < 4) {
+                                quarter = 'Q1'
+                            } else if (month >= 4 && month < 7) {
+                                quarter = 'Q2'
+                            } else if (month >= 7 && month < 10) {
+                                quarter = 'Q3'
+                            } else {
+                                quarter = 'Q4'
+                            }
                             if(!companyDictionary[cik]) {
                                 companyDictionary[cik] = true;
                                 companyData.push({id:cik, name:companyName, ticker})
