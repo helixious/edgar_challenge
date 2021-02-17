@@ -4,16 +4,22 @@ import Orm from './orm';
 
 export default class Crawler extends EventEmitter{
 
-    //DDOS flag prevention: Implemented concurrency limit of a default of 5 concurrent requests limit.
-    constructor(maxConnectionCount = 8) {
+    //DDOS flag prevention: Implemented concurrency limit of a default of 10 concurrent requests limit.
+    constructor(maxConnectionCount = 10) {
         super();
+        this._tickers = {};
         this._indexUrls = [];
+        this._formCount = 0;
         this._maxConnectionCount = maxConnectionCount;
         this._connectionCount = 0;
 
-        this.spawnDBInstances().then((clients) => {
+        this.spawnDBInstances().then( async (clients) => {
             this._db = clients;
-
+            const tickers = await this.fetchPage('https://www.sec.gov/files/company_tickers.json');
+            Object.keys(tickers).forEach(index => {
+                let {cik_str, ticker} = tickers[index];
+                this._tickers[cik_str]= ticker;
+            })
 
             this.fetchIndexLinks();
         })
@@ -23,9 +29,8 @@ export default class Crawler extends EventEmitter{
     async spawnDBInstances() {
         let instances = []
         for (let i = 0; i < this._maxConnectionCount; i++) {
-            // let client = await new Promise((resolve) => resolve(new Orm()));
-            let client = await new Orm();
-            instances.push({client, isIdle: true});
+            let orm = await new Orm({purge:i == 0}); // first connection is responsible for purging and recreating tables
+            instances.push({orm, isIdle: true}); // isIdle param is toggled to set place a lock on the ORM object while it comits new data to database
         }
         return instances;
     }
@@ -36,20 +41,19 @@ export default class Crawler extends EventEmitter{
 
                 // checks if there are any remaining urls left and if the active connection count is less that the max allowed
                 if(this._indexUrls.length > 0 && this._connectionCount < this._maxConnectionCount) {
-
-
-                    console.log(`active connections: ${this._connectionCount}, indexes queued: ${this._indexUrls.length}`);
-                    let url = this._indexUrls.shift();
                     this._connectionCount++;
+                    let url = this._indexUrls.shift(); // the indexUrls are stored in no specific order, but are selected FiFo
+                    
                     this.fetchPage(url).then((data) => {
-                        this.extractEdgarIndex(data).then( async(indexData) => {
-                            for(const companyData of indexData) {
-                                for(let i = 0; i < this._db.length; i++) {
-                                    if(this._db[i].isIdle) {
-                                        this._db[i].isIdle = false;
-                                        await this._db[i].client.addCompanyForms(companyData);
-                                        this._db[i].isIdle = true;
-                                    }
+
+                        // the extracted data gets splitted into two data objects that are independently commited 
+                        this.extractEdgarIndex(data).then( async({shardKey, shardData, companyData}) => {
+                            for(let i = 0; i < this._db.length; i++) {
+                                if(this._db[i].isIdle) { // this prevents race condition
+                                    this._db[i].isIdle = false;
+                                    await this._db[i].orm.bulkInsertCompany(companyData);
+                                    await this._db[i].orm.bulkInsertIntoShard(shardData, shardKey); // storing form data into different table shards
+                                    this._db[i].isIdle = true;
                                 }
                             }
                             this._connectionCount--;
@@ -58,6 +62,9 @@ export default class Crawler extends EventEmitter{
                             reject(e);
                         })
                     });
+
+                    console.log(`active connections: ${this._connectionCount}, indexes queued: ${this._indexUrls.length}, total fillings: ${this._formCount}`);
+
                 } else if(this._indexUrls.length == 0){ // once all urls have been fetched
                     this._callBack(); // initial promise resolver
                 }
@@ -72,41 +79,56 @@ export default class Crawler extends EventEmitter{
 
         return new Promise((resolve, reject) => {
             try {
-                let cikDictionary = {};
-                let result = [];
-                let rows = data.split('\n');
+                let companyDictionary = {};
+                let companyData = [];
+                let shardData = [];
+                let shardKey = null;
+                let quarter = null;
                 let cursor = null;
-                let formCount = 0;
+
+                let rows = data.split('\n');
                 for (let i = 0; i < rows.length; i++) {
                     let row = rows[i];
                     if (!cursor && row.indexOf('-') != -1) {
                         cursor = i + 1;
                     } else if (cursor) {
-                        let columns = row.split('|'); // CIK|Company Name|Form Type|Date Filed|Filename;
+                        let columns = row.split('|'); // CIK|Company Name|Form Type|Date Filed|Filename
                         let cik = Number(columns[0]);
                         let companyName = columns[1];
                         let formType = columns[2];
                         let dateFiled = columns[3];
                         let fileName = columns[4];
+                        let ticker = this._tickers[cik];
 
                         if(formType && dateFiled && fileName) {
-                            if(!cikDictionary[cik]) {
-                                cikDictionary[cik] = {
-                                    cik, companyName, forms:[]
+                            if(!shardKey) {
+                                let dateComponents = dateFiled.split('-');
+                                shardKey = dateComponents.shift();
+                                let month = Number(dateComponents.shift());
+                                if(month < 4) {
+                                    quarter = 'Q1'
+                                } else if(month >= 4 && month < 7) {
+                                    quarter = 'Q2'
+                                } else if(month >= 7 && month < 10) {
+                                    quarter = 'Q3'
+                                } else {
+                                    quarter = 'Q4'
                                 }
+                            } 
+                            if(!companyDictionary[cik]) {
+                                companyDictionary[cik] = true;
+                                companyData.push({id:cik, name:companyName, ticker})
                             }
-                            cikDictionary[cik].forms.push({cik, formType, dateFiled, fileName});
+                            shardData.push({cik, formType, dateFiled, fileName});
                         }
                         
                     }
                 }
-                for(let cik of Object.keys(cikDictionary)) {
 
-                    formCount += cikDictionary[cik].forms.length;
-                    result.push(cikDictionary[cik]);
-                }
-                console.log('form count:',formCount);
-                resolve(result);
+                let formCount = shardData.length;
+                this._formCount += formCount;
+                console.log(`\n${shardKey} ${quarter} index - company count: ${companyData.length} form count: ${formCount}`);
+                resolve({shardKey, shardData, companyData});
             } catch(e) {
                 reject(e);
             }
@@ -158,53 +180,6 @@ export default class Crawler extends EventEmitter{
             });
 
             request.on('error', (err) => reject(err));
-        });
-    }
-
-    /*
-        DEPRECATE fetchPageContent & fetchFullIndexUrls, using fetchPage & fetchIndexLinks instead
-        Found better way to retrieve year and quarter filepaths by using ./index.json
-        SSR (server-side rendering) may not be required for extracting paths but is still usefull if text extraction of the documents themselves
-    */
-
-    fetchFullIndexUrls() { // DEPRECATED
-        return new Promise((resolve) => {
-            try {
-                this.fetchPageContent('https://www.sec.gov/Archives/edgar/full-index/', 'a').then(results => {
-                    let yearIndexLinks = results.filter(url => !isNaN(url.label) && url.label != '');
-                    resolve(yearIndexLinks);
-                })
-            } catch (e) {
-                console.log(e);
-                resolve(null);
-            };
-        });
-    }
-
-    fetchPageContent(url, selector='body') { // DEPRECATED
-        return new Promise(resolve => {
-            let error = null;
-            JSDOM.fromURL(url).then((dom) => {
-                try {
-                    let result = null;
-                    if(selector == 'body') {
-                        result = dom.window.document.querySelector(selector).textContent;
-                    } else {
-                        result = [...dom.window.document.querySelectorAll(selector)].map(node => {
-                            let {textContent, href} = node;
-                            return {label:textContent, href};
-                        })
-                    }
-                    resolve(result);
-                    
-                } catch(e) {
-                    error = new TypeError('unable to parse dom');
-                    resolve(error);
-                }
-            }).catch((e) => {
-                error = new TypeError('unable to fetch url');
-                resolve(error);
-            })
         });
     }
 };

@@ -15,19 +15,25 @@ export default (sequelize, DataTypes) => {
             unique: false,
             allowNull: false
         },
-
+        ticker: {
+            type: DataTypes.STRING,
+            allowNull: true
+        }
     },
     {
         tableName: 'company',
-        classMethods: {
-            associate: (models) => {
-                models.Company.hasMany(models.Form, {
-                    as: 'Forms',
-                    foreignKey: 'cik',
-                    otherKey: 'form_id'
-                })
-            }
-        }
+        createdAt: false,
+        updateAt: false,
+        // classMethods: {
+        //     associate: (models) => {
+        //         models.Company.hasMany(models.Form, {
+        //             as: 'Forms',
+        //             foreignKey: 'cik',
+        //             otherKey: 'form_id'
+        //         })
+        //     }
+        // },
+        freezeTableName: true
     }
     )
 }
