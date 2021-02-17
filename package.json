@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "start": "node -r dotenv/config -r esm api.js",
-    "import": "node -r dotenv/config -r esm importer.js"
+    "import": "node -r dotenv/config -r esm importer.js",
+    "test": "nodemon -r dotenv/config -r esm api.js"
   },
   "repository": {
     "type": "git",
