@@ -39,3 +39,17 @@ $ npm run import
 $ npm run start
 ```
 
+## Technical Documentation
+#### UML Class Diagram
+![uml_class_diagram](https://github.com/helixious/edgar_challenge/blob/orm/src/SecSecGo%20-%20Class%20Diagram.png?raw=true)
+
+#### Sequence Diagram
+![uml_sequence_diagram](https://github.com/helixious/edgar_challenge/blob/orm/src/SecSecGo%20Import%20Sequence%20Diagram.png?raw=true)
+
+#### UML Activity Diagram
+![uml_activity_diagram](https://github.com/helixious/edgar_challenge/blob/orm/src/SecSecGo%20Import%20Activity%20Diagram.png?raw=true)
+
+## API Screenshots
+![screenshot_1](https://github.com/helixious/edgar_challenge/blob/orm/src/screenshot_1.png?raw=true)
+![screenshot_2](https://github.com/helixious/edgar_challenge/blob/orm/src/screenshot_2.png?raw=true)
+![screenshot_3](https://github.com/helixious/edgar_challenge/blob/orm/src/screenshot_3.png?raw=true)
