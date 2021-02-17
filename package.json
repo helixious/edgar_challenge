@@ -1,0 +1,31 @@
+{
+  "name": "edgar_challenge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "start": "node -r dotenv/config -r esm api.js",
+    "import": "node -r dotenv/config -r esm importer.js",
+    "test": "nodemon -r dotenv/config -r esm api.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/helixious/edgar_challenge.git"
+  },
+  "author": "sle",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/helixious/edgar_challenge/issues"
+  },
+  "homepage": "https://github.com/helixious/edgar_challenge#readme",
+  "dependencies": {
+    "apollo-server-express": "^2.21.0",
+    "body-parser": "^1.19.0",
+    "dotenv": "^8.2.0",
+    "esm": "^3.2.25",
+    "express": "^4.17.1",
+    "graphql": "^15.5.0",
+    "pg": "^8.5.1",
+    "sequelize": "^6.5.0"
+  }
+}
