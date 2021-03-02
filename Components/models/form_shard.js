@@ -1,4 +1,4 @@
-export default (sequelize, DataTypes, shardName) => {
+module.exports = (sequelize, DataTypes, shardName) => {
     return sequelize.define(shardName, {
         id: {
             primaryKey: true,
