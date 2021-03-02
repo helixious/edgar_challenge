@@ -1,6 +1,6 @@
 // CIK|Company Name|Form Type|Date Filed|Filename;
 
-export default (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => {
     return sequelize.define('company', {
         id: {
             type: DataTypes.INTEGER,

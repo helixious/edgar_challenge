@@ -1,8 +1,9 @@
-import https from 'https';
-import EventEmitter from 'events';
-import Orm from './orm';
+const https = require('https');
+const EventEmitter = require('events');
+const Orm = require('./orm');
 
-export default class Crawler extends EventEmitter{
+
+module.exports = class Crawler extends EventEmitter{
 
     //DDOS flag prevention: Implemented concurrency limit of a default of 10 concurrent requests limit.
     constructor(maxConnectionCount = 10) {

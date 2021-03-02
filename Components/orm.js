@@ -1,9 +1,8 @@
-import {Db, DataTypes, Op} from './config/database';
-import EventEmitter from 'events';
+const {Db, DataTypes, Op} = require('./config/database');
+const EventEmitter = require('events');
 // Here we setup the user and company object relational maps
-import FormShard from './models/form_shard';
-import Company from './models/company';
-
+const FormShard = require('./models/form_shard');
+const Company = require('./models/company');
 
 const Model = {
     Company: Company(Db, DataTypes)
@@ -12,9 +11,9 @@ const Model = {
 
 
 // Schema type definitions
-import typeDefs from './schema/schema';
+const typeDefs = require('./schema/schema');
 
-export default class Orm extends EventEmitter{
+module.exports = class Orm extends EventEmitter{
     constructor (purge) {
         super();
         this.typeDefs = typeDefs;
