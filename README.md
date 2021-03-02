@@ -28,15 +28,38 @@ POSTGRES_HOST
 PORT
 ```
 
-#### Step 1 install dependency & run import feature
+#### Installation
 ```git
-$ npm install
-$ npm run import
+$ npm i sec2go
 ```
 
-#### Step 2 run server
-```git
-$ npm run start
+
+
+#### Crawler Setup
+The crawler component is used to retrieve, process and save the SEC EDGAR full index
+This process takes around 12minutes to complete and requires a mysql or postgres DB and an allocation of atleast 2.7 gb of diskspace.
+```js
+const { Crawler } = require('sec2go');
+const crawler = new Crawler();
+```
+
+#### GraphQL API Setup
+```js
+
+const { Orm } = require('sec2go');
+const {PORT} = process.env
+const app = require('express')();
+const { ApolloServer } = require('apollo-server-express');
+const bodyParser = require('body-parser');
+
+const {typeDefs, resolvers} = new Orm();
+const server = new ApolloServer({typeDefs, resolvers});
+app.use(bodyParser.json());
+server.applyMiddleware({ app });
+
+app.listen({port:PORT}, () => {
+    console.log(`🚀 GraphQL Server ready at localhost:${PORT}/graphql`);
+});
 ```
 
 ## Technical Documentation
