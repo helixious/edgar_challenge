@@ -45,16 +45,18 @@ const crawler = new Crawler();
 
 #### GraphQL API Setup
 ```js
+const {PORT} = process.env
 
 const { Orm } = require('sec2go');
-const {PORT} = process.env
-const app = require('express')();
-const { ApolloServer } = require('apollo-server-express');
-const bodyParser = require('body-parser');
-
 const {typeDefs, resolvers} = new Orm();
-const server = new ApolloServer({typeDefs, resolvers});
+
+const app = require('express')();
+const bodyParser = require('body-parser');
 app.use(bodyParser.json());
+
+const { ApolloServer } = require('apollo-server-express');
+const server = new ApolloServer({typeDefs, resolvers});
+
 server.applyMiddleware({ app });
 
 app.listen({port:PORT}, () => {
